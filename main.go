@@ -2,103 +2,271 @@ package main
 
 import (
 	"bufio"
+	"flag"
 	"fmt"
 	"io"
 	"math"
 	"os"
-	"strconv"
 	"strings"
+
+	"github.com/lucasb-eyer/go-colorful"
 )
 
-// hexToRGB converts a HEX color string (e.g., "#FF00FF") to R, G, B integer components.
-func hexToRGB(hexColor string) (r, g, b int, err error) {
-	if len(hexColor) != 7 || hexColor[0] != '#' {
-		return 0, 0, 0, fmt.Errorf("invalid hex color format: %s", hexColor)
+var osExit = os.Exit
+
+// getGradientColor interpolates a color based on progress and returns the ANSI truecolor color part (e.g., "38;2;R;G;Bm").
+// It now uses go-colorful for robust color space handling and interpolation.
+func getGradientColor(progress float64, startHex, endHex string, colorspace, hueDirection string) (string, error) {
+	// Parse start and end hex colors using go-colorful
+	startColor, err := colorful.Hex(startHex)
+	if err != nil {
+		return "", fmt.Errorf("invalid start hex color: %s (%w)", startHex, err)
+	}
+	endColor, err := colorful.Hex(endHex)
+	if err != nil {
+		return "", fmt.Errorf("invalid end hex color: %s (%w)", endHex, err)
 	}
 
-	r, err = strconv.ParseInt(hexColor[1:3], 16, 0)
-	if err != nil {
-		return 0, 0, 0, fmt.Errorf("invalid red component: %w", err)
-	}
-	g, err = strconv.ParseInt(hexColor[3:5], 16, 0)
-	if err != nil {
-		return 0, 0, 0, fmt.Errorf("invalid green component: %w", err)
-	}
-	b, err = strconv.ParseInt(hexColor[5:7], 16, 0)
-	if err != nil {
-		return 0, 0, 0, fmt.Errorf("invalid blue component: %w", err)
-	}
-	return int(r), int(g), int(b), nil
-}
+	var interpolatedColor colorful.Color
 
-// getGradientColor interpolates a color based on progress and returns an ANSI truecolor escape sequence.
-func getGradientColor(progress float64, startHex, endHex string) (string, error) {
-	startR, startG, startB, err := hexToRGB(startHex)
-	if err != nil {
-		return "", err
-	}
-	endR, endG, endB, err := hexToRGB(endHex)
-	if err != nil {
-		return "", err
+	// Determine the blending method based on colorspace and hueDirection
+	switch colorspace {
+	case "rgb":
+		interpolatedColor = startColor.BlendRgb(endColor, progress)
+	case "hsl":
+		// Your installed go-colorful v1.2.0 does not define HuePath or accept it in BlendHcl.
+		// BlendHcl will use its internal default hue path (likely shortest).
+		interpolatedColor = startColor.BlendHcl(endColor, progress)
+	case "lab":
+		interpolatedColor = startColor.BlendLab(endColor, progress)
+	default:
+		return "", fmt.Errorf("unsupported colorspace: %s", colorspace)
 	}
 
-	// Interpolate each color component
-	r := int(math.Round(float64(startR) + (float64(endR)-float64(startR))*progress))
-	g := int(math.Round(float64(startG) + (float64(endG)-float64(startG))*progress))
-	b := int(math.Round(float64(startB) + (float64(endB)-float64(startB))*progress))
+	r, g, b := interpolatedColor.Clamped().RGB255()
 
-	// Ensure color values are within 0-255 range
-	r = int(math.Max(0, math.Min(255, float64(r))))
-	g = int(math.Max(0, math.Min(255, float64(g))))
-	b = int(math.Max(0, math.Min(255, float64(b))))
-
-	return fmt.Sprintf("\x1b[38;2;%d;%d;%dm", r, g, b), nil
+	return fmt.Sprintf("38;2;%d;%d;%dm", r, g, b), nil
 }
 
 func main() {
-	const gradStart = "#FF00FF" // Magenta
-	const gradEnd = "#00FFFF"   // Cyan
+	// Define command-line flags
+	showHelp := flag.Bool("help", false, "Show this help message")
+	showVersion := flag.Bool("version", false, "Show version information")
 
-	// Read all of stdin into a string
+	startColor := flag.String("start-color", "#FF00FF", "Starting HEX color (e.g., #FF00FF for magenta)")
+	endColor := flag.String("end-color", "#00FFFF", "Ending HEX color (e.g., #00FFFF for cyan)")
+
+	gradientDirection := flag.String("gradient-direction", "horizontal", "Direction of the gradient (horizontal, vertical).")
+	colorspace := flag.String("colorspace", "rgb", "Color space for interpolation (rgb, hsl, lab).")
+	hueDirection := flag.String("hue-direction", "shortest", "Direction for hue interpolation in HSL/HSV/HCL (shortest, clockwise, counter-clockwise). Only applies if colorspace is HSL/HSV/HCL.")
+	steps := flag.Int("steps", 0, "Number of discrete color steps (0 for smooth gradient).")
+	bold := flag.Bool("bold", false, "Apply bold formatting to the text.")
+	italic := flag.Bool("italic", false, "Apply italic formatting to the text.")
+	underline := flag.Bool("underline", false, "Apply underline formatting to the text.")
+	invert := flag.Bool("invert", false, "Invert the gradient direction (e.g., end color at start).")
+
+	// Set a custom usage function for --help
+	flag.Usage = func() {
+		fmt.Fprintf(os.Stderr, "Usage: %s [OPTIONS]\n", os.Args[0])
+		fmt.Fprintln(os.Stderr, "Applies a color gradient to text read from standard input.")
+		fmt.Fprintln(os.Stderr, "\nOptions:")
+		flag.PrintDefaults() // Prints default usage for defined flags
+		fmt.Fprintln(os.Stderr, "\nExamples:")
+		fmt.Fprintln(os.Stderr, "  echo \"Hello, World!\" | colorblend")
+		fmt.Fprintln(os.Stderr, "  echo \"Colorful!\" | colorblend --start-color #FF0000 --end-color #00FF00")
+		fmt.Fprintln(os.Stderr, "  cat my_file.txt | colorblend -start-color #FFFF00 -end-color #0000FF --bold --italic")
+		fmt.Fprintln(os.Stderr, "  echo \"Stepped!\" | colorblend --steps 5 --start-color #FF0000 --end-color #0000FF")
+		fmt.Fprintln(os.Stderr, "  echo \"Vertical!\" | colorblend --gradient-direction vertical --start-color #FF0000 --end-color #0000FF")
+		fmt.Fprintln(os.Stderr, "  echo \"Inverted!\" | colorblend --invert")
+		fmt.Fprintln(os.Stderr, "  echo \"HSL Gradient!\" | colorblend -s #FF0000 -e #0000FF --colorspace hsl --hue-direction clockwise")
+	}
+
+	// Parse command-line arguments
+	flag.Parse()
+
+	// Handle --version flag
+	if *showVersion {
+		fmt.Println("colorblend v1.0.0")
+		osExit(0)
+	}
+
+	// Handle --help flag explicitly
+	if *showHelp {
+		flag.Usage()
+		osExit(0)
+	}
+
+	// Validate color format using colorful.Hex
+	_, err := colorful.Hex(*startColor)
+	if err != nil { // Corrected: Check for error != nil
+		fmt.Fprintf(os.Stderr, "Error: Invalid format for --start-color: %s. Must be a 7-character hex string (e.g., #RRGGBB). Details: %v\n\n", *startColor, err)
+		flag.Usage()
+		osExit(1)
+	}
+	_, err = colorful.Hex(*endColor)
+	if err != nil { // Corrected: Check for error != nil
+		fmt.Fprintf(os.Stderr, "Error: Invalid format for --end-color: %s. Must be a 7-character hex string (e.g., #RRGGBB). Details: %v\n\n", *endColor, err)
+		flag.Usage()
+		osExit(1)
+	}
+
+	// Validate other flag values
+	if *gradientDirection != "horizontal" && *gradientDirection != "vertical" {
+		fmt.Fprintf(os.Stderr, "Error: Invalid value for --gradient-direction: %s. Must be 'horizontal' or 'vertical'.\n\n", *gradientDirection)
+		flag.Usage()
+		osExit(1)
+	}
+	if *colorspace != "rgb" && *colorspace != "hsl" && *colorspace != "lab" {
+		fmt.Fprintf(os.Stderr, "Error: Invalid value for --colorspace: %s. Must be 'rgb', 'hsl', or 'lab'.\n\n", *colorspace)
+		flag.Usage()
+		osExit(1)
+	}
+	// Hue direction is only relevant for HSL/LAB.
+	// Since HuePath is not defined in your installed module, the --hue-direction flag
+	// will have no effect on HCL/LAB blending, as BlendHcl/BlendLab will use their default.
+	if (*colorspace == "hsl" || *colorspace == "lab") && (*hueDirection != "shortest" && *hueDirection != "clockwise" && *hueDirection != "counter-clockwise") {
+		fmt.Fprintf(os.Stderr, "Error: Invalid value for --hue-direction: %s. Must be 'shortest', 'clockwise', or 'counter-clockwise' when using HSL/LAB colorspace.\n\n", *hueDirection)
+		flag.Usage()
+		osExit(1)
+	}
+	if *steps < 0 {
+		fmt.Fprintf(os.Stderr, "Error: --steps cannot be negative.\n\n")
+		flag.Usage()
+		osExit(1)
+	}
+
+	// If there are any remaining (non-flag) arguments, it might indicate incorrect usage.
+	if flag.NArg() > 0 {
+		fmt.Fprintf(os.Stderr, "Error: Unexpected arguments: %s\n\n", strings.Join(flag.Args(), " "))
+		flag.Usage()
+		osExit(1)
+	}
+
+	// Read all of stdin into lines (necessary for vertical gradient)
 	reader := bufio.NewReader(os.Stdin)
-	inputBuilder := strings.Builder{}
+	var lines [][]rune
 	for {
-		r, _, err := reader.ReadRune()
+		lineBytes, _, err := reader.ReadLine()
 		if err != nil {
 			if err == io.EOF {
 				break
 			}
 			fmt.Fprintf(os.Stderr, "Error reading stdin: %v\n", err)
-			os.Exit(1)
+			osExit(1)
 		}
-		inputBuilder.WriteRune(r)
+		lineRunes := []rune(string(lineBytes)) // Convert line bytes to runes
+		lines = append(lines, lineRunes)
 	}
-	inputString := inputBuilder.String()
-	runes := []rune(inputString) // Work with runes to handle multi-byte characters correctly
-	totalChars := len(runes)
 
-	if totalChars == 0 {
+	if len(lines) == 0 {
 		fmt.Printf("\x1b[0m\n") // Reset color and print newline even if no input
 		return
 	}
 
-	for i, char := range runes {
-		var progress float64
-		if totalChars <= 1 {
-			progress = 0.0
-		} else {
-			progress = float64(i) / float64(totalChars-1)
+	// Determine total characters for horizontal, or total lines for vertical
+	var totalGradientUnits int
+	if *gradientDirection == "horizontal" {
+		totalGradientUnits = 0
+		for _, line := range lines {
+			totalGradientUnits += len(line)
 		}
-
-		colorCode, err := getGradientColor(progress, gradStart, gradEnd)
-		if err != nil {
-			fmt.Fprintf(os.Stderr, "Error getting gradient color: %v\n", err)
-			os.Exit(1)
+		if totalGradientUnits == 0 { // Edge case for empty lines (only newlines in input)
+			// Print newlines with reset color for each empty line
+			for range lines {
+				fmt.Printf("\x1b[0m\n")
+			}
+			return
 		}
-
-		fmt.Printf("%s%c", colorCode, char)
+	} else { // vertical
+		totalGradientUnits = len(lines)
 	}
 
-	// Reset color at the end
+	// Apply formatting (bold, italic, underline)
+	formatPrefix := ""
+	if *bold {
+		formatPrefix += "\x1b[1m"
+	}
+	if *italic {
+		formatPrefix += "\x1b[3m"
+	}
+	if *underline {
+		formatPrefix += "\x1b[4m"
+	}
+
+	// Character counter for horizontal gradient progress
+	charCountHorizontal := 0
+
+	// Process lines based on gradient direction
+	for lineIndex, line := range lines {
+		if *gradientDirection == "vertical" && len(line) == 0 && totalGradientUnits > 1 {
+            // Handle empty lines specifically for vertical gradients to ensure they contribute to progress
+            // but still print a newline with reset.
+            var progress float64
+            if totalGradientUnits <= 1 {
+                progress = 0.0
+            } else {
+                progress = float64(lineIndex) / float64(totalGradientUnits-1)
+            }
+            if *invert {
+                progress = 1.0 - progress
+            }
+            if *steps > 0 {
+                progress = math.Round(progress*float64(*steps)) / float64(*steps)
+            }
+            // Get color for the "empty" line based on its vertical position
+            colorPart, err := getGradientColor(progress, *startColor, *endColor, *colorspace, *hueDirection)
+            if err != nil {
+                fmt.Fprintf(os.Stderr, "Error getting gradient color for empty line: %v\n", err)
+                osExit(1)
+            }
+            // Print the empty line with its calculated color and format
+            fmt.Printf("\x1b[%s%s\n", colorPart, formatPrefix)
+            continue // Move to next line
+        }
+
+		for _, char := range line {		
+			var progress float64
+
+			if *gradientDirection == "horizontal" {
+				if totalGradientUnits <= 1 {
+					progress = 0.0
+				} else {
+					progress = float64(charCountHorizontal) / float64(totalGradientUnits-1)
+				}
+				charCountHorizontal++
+			} else { // vertical
+				if totalGradientUnits <= 1 {
+					progress = 0.0
+				} else {
+					progress = float64(lineIndex) / float64(totalGradientUnits-1)
+				}
+			}
+
+			// Apply invert if flag is set
+			if *invert {
+				progress = 1.0 - progress
+			}
+
+			// Apply steps if flag is set (quantize progress)
+			if *steps > 0 {
+				progress = math.Round(progress*float64(*steps)) / float64(*steps)
+			}
+
+			// Get the ANSI color code for the current character/line using go-colorful
+			colorPart, err := getGradientColor(progress, *startColor, *endColor, *colorspace, *hueDirection)
+			if err != nil {
+				fmt.Fprintf(os.Stderr, "Error getting gradient color: %v\n", err)
+				osExit(1)
+			}
+
+			fmt.Printf("\x1b[%s%s%c", colorPart, formatPrefix, char)
+		}
+		// Print newline at end of line (original line breaks), but only if not an empty line already handled
+		if !(*gradientDirection == "vertical" && len(line) == 0 && totalGradientUnits > 1) {
+            fmt.Printf("\n")
+        }
+	}
+
+	// Reset all formatting at the end
 	fmt.Printf("\x1b[0m\n")
 }
