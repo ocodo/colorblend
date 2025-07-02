@@ -33,7 +33,7 @@ func getGradientColor(progress float64, startHex, endHex string, colorspace, hue
 	switch colorspace {
 	case "rgb":
 		interpolatedColor = startColor.BlendRgb(endColor, progress)
-	case "hsl":
+	case "hcl":
 		// Your installed go-colorful v1.2.0 does not define HuePath or accept it in BlendHcl.
 		// BlendHcl will use its internal default hue path (likely shortest).
 		interpolatedColor = startColor.BlendHcl(endColor, progress)
@@ -57,12 +57,9 @@ func main() {
 	endColor := flag.String("end-color", "#00FFFF", "Ending HEX color (e.g., #00FFFF for cyan)")
 
 	gradientDirection := flag.String("gradient-direction", "horizontal", "Direction of the gradient (horizontal, vertical).")
-	colorspace := flag.String("colorspace", "rgb", "Color space for interpolation (rgb, hsl, lab).")
-	hueDirection := flag.String("hue-direction", "shortest", "Direction for hue interpolation in HSL/HSV/HCL (shortest, clockwise, counter-clockwise). Only applies if colorspace is HSL/HSV/HCL.")
+	colorspace := flag.String("colorspace", "rgb", "Color space for interpolation (rgb, hcl, lab).")
+	hueDirection := flag.String("hue-direction", "shortest", "Direction for hue interpolation in HCL (shortest, clockwise, counter-clockwise). Only applies if colorspace is HCL or LAB.")
 	steps := flag.Int("steps", 0, "Number of discrete color steps (0 for smooth gradient).")
-	bold := flag.Bool("bold", false, "Apply bold formatting to the text.")
-	italic := flag.Bool("italic", false, "Apply italic formatting to the text.")
-	underline := flag.Bool("underline", false, "Apply underline formatting to the text.")
 	invert := flag.Bool("invert", false, "Invert the gradient direction (e.g., end color at start).")
 
 	// Set a custom usage function for --help
@@ -74,11 +71,11 @@ func main() {
 		fmt.Fprintln(os.Stderr, "\nExamples:")
 		fmt.Fprintln(os.Stderr, "  echo \"Hello, World!\" | colorblend")
 		fmt.Fprintln(os.Stderr, "  echo \"Colorful!\" | colorblend --start-color #FF0000 --end-color #00FF00")
-		fmt.Fprintln(os.Stderr, "  cat my_file.txt | colorblend -start-color #FFFF00 -end-color #0000FF --bold --italic")
+		fmt.Fprintln(os.Stderr, "  cat my_file.txt | colorblend -start-color #FFFF00 -end-color #0000FF")
 		fmt.Fprintln(os.Stderr, "  echo \"Stepped!\" | colorblend --steps 5 --start-color #FF0000 --end-color #0000FF")
 		fmt.Fprintln(os.Stderr, "  echo \"Vertical!\" | colorblend --gradient-direction vertical --start-color #FF0000 --end-color #0000FF")
 		fmt.Fprintln(os.Stderr, "  echo \"Inverted!\" | colorblend --invert")
-		fmt.Fprintln(os.Stderr, "  echo \"HSL Gradient!\" | colorblend -s #FF0000 -e #0000FF --colorspace hsl --hue-direction clockwise")
+		fmt.Fprintln(os.Stderr, "  echo \"HCL Gradient!\" | colorblend -s #FF0000 -e #0000FF --colorspace hcl --hue-direction clockwise")
 	}
 
 	// Parse command-line arguments
@@ -116,16 +113,16 @@ func main() {
 		flag.Usage()
 		osExit(1)
 	}
-	if *colorspace != "rgb" && *colorspace != "hsl" && *colorspace != "lab" {
-		fmt.Fprintf(os.Stderr, "Error: Invalid value for --colorspace: %s. Must be 'rgb', 'hsl', or 'lab'.\n\n", *colorspace)
+	if *colorspace != "rgb" && *colorspace != "hcl" && *colorspace != "lab" {
+		fmt.Fprintf(os.Stderr, "Error: Invalid value for --colorspace: %s. Must be 'rgb', 'hcl', or 'lab'.\n\n", *colorspace)
 		flag.Usage()
 		osExit(1)
 	}
-	// Hue direction is only relevant for HSL/LAB.
+	// Hue direction is only relevant for HCL/LAB.
 	// Since HuePath is not defined in your installed module, the --hue-direction flag
 	// will have no effect on HCL/LAB blending, as BlendHcl/BlendLab will use their default.
-	if (*colorspace == "hsl" || *colorspace == "lab") && (*hueDirection != "shortest" && *hueDirection != "clockwise" && *hueDirection != "counter-clockwise") {
-		fmt.Fprintf(os.Stderr, "Error: Invalid value for --hue-direction: %s. Must be 'shortest', 'clockwise', or 'counter-clockwise' when using HSL/LAB colorspace.\n\n", *hueDirection)
+	if (*colorspace == "hcl" || *colorspace == "lab") && (*hueDirection != "shortest" && *hueDirection != "clockwise" && *hueDirection != "counter-clockwise") {
+		fmt.Fprintf(os.Stderr, "Error: Invalid value for --hue-direction: %s. Must be 'shortest', 'clockwise', or 'counter-clockwise' when using HCL/LAB colorspace.\n\n", *hueDirection)
 		flag.Usage()
 		osExit(1)
 	}
@@ -181,18 +178,6 @@ func main() {
 		totalGradientUnits = len(lines)
 	}
 
-	// Apply formatting (bold, italic, underline)
-	formatPrefix := ""
-	if *bold {
-		formatPrefix += "\x1b[1m"
-	}
-	if *italic {
-		formatPrefix += "\x1b[3m"
-	}
-	if *underline {
-		formatPrefix += "\x1b[4m"
-	}
-
 	// Character counter for horizontal gradient progress
 	charCountHorizontal := 0
 
@@ -220,7 +205,7 @@ func main() {
                 osExit(1)
             }
             // Print the empty line with its calculated color and format
-            fmt.Printf("\x1b[%s%s\n", colorPart, formatPrefix)
+            fmt.Printf("\x1b[%s%s\n", colorPart)
             continue // Move to next line
         }
 
@@ -259,7 +244,7 @@ func main() {
 				osExit(1)
 			}
 
-			fmt.Printf("\x1b[%s%s%c", colorPart, formatPrefix, char)
+			fmt.Printf("\x1b[%s%s%c", colorPart, char)
 		}
 		// Print newline at end of line (original line breaks), but only if not an empty line already handled
 		if !(*gradientDirection == "vertical" && len(line) == 0 && totalGradientUnits > 1) {
