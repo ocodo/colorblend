@@ -7,9 +7,9 @@ import (
     "math"
     "os"
     "strings"
-    
-    "github.com/spf13/cobra"
+
     "github.com/lucasb-eyer/go-colorful"
+    "github.com/spf13/cobra"
 )
 
 var osExit = os.Exit
@@ -91,7 +91,7 @@ var rootCmd = &cobra.Command{
             os.Exit(1)
         }
 
-        if gradientDirection != "horizontal" && gradientDirection != "vertical" {
+        if gradientDirection != "horizontal" && gradientDirection != "vertical" && gradientDirection != "h" && gradientDirection != "v" {
             fmt.Fprintf(os.Stderr, "Error: Invalid value for --gradient-direction: %s. Must be 'horizontal' or 'vertical'.\n\n", gradientDirection)
             cmd.Usage()
             os.Exit(1)
@@ -210,7 +210,7 @@ func init() {
     rootCmd.Flags().StringVarP(&startColor, "start-color", "s", "#FF00FF", "Starting HEX color (e.g., #FF00FF for magenta)")
     rootCmd.Flags().StringVarP(&endColor, "end-color", "e", "#00FFFF", "Ending HEX color (e.g., #00FFFF for cyan)")
     rootCmd.Flags().StringVarP(&gradientDirection, "gradient-direction", "g", "horizontal", "Direction of the gradient (horizontal, vertical)")
-    rootCmd.Flags().StringVarP(&hueDirection, "hue-direction", "u", "shortest", "Direction for hue interpolation (shortest, clockwise, counter-clockwise)")
+    rootCmd.Flags().StringVarP(&hueDirection, "color-direction", "c", "shortest", "Direction for color hue interpolation (shortest, clockwise, counter-clockwise)")
     rootCmd.Flags().IntVarP(&steps, "steps", "t", 0, "Number of discrete color steps (0 for smooth gradient)")
     rootCmd.Flags().BoolVarP(&invert, "invert", "i", false, "Invert the gradient direction")
     rootCmd.Flags().BoolP("help", "h", false, "Show help message")
@@ -229,7 +229,7 @@ func init() {
         fmt.Fprintln(os.Stderr, "  echo \"Inverted!\" | colorblend --invert")
         fmt.Fprintln(os.Stderr, "  echo \"Hue Direction\" | colorblend --hue-direction clockwise")
     })
-    
+
     rootCmd.SetVersionTemplate("colorblend v1.0.0\n")
 
     rootCmd.PersistentPreRun = func(cmd *cobra.Command, args []string) {
