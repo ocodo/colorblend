@@ -209,8 +209,8 @@ var rootCmd = &cobra.Command{
 func init() {
     rootCmd.Flags().StringVarP(&startColor, "start-color", "s", "#FF00FF", "Starting HEX color (e.g., #FF00FF for magenta)")
     rootCmd.Flags().StringVarP(&endColor, "end-color", "e", "#00FFFF", "Ending HEX color (e.g., #00FFFF for cyan)")
-    rootCmd.Flags().StringVarP(&gradientDirection, "gradient-direction", "g", "horizontal", "Direction of the gradient (horizontal, vertical)")
-    rootCmd.Flags().StringVarP(&hueDirection, "color-direction", "c", "shortest", "Direction for color hue interpolation (shortest, clockwise, counter-clockwise)")
+    rootCmd.Flags().StringVarP(&gradientDirection, "gradient-direction", "g", "horizontal", "Direction of the gradient (horizontal, vertical or h, v)")
+    rootCmd.Flags().StringVarP(&hueDirection, "color-direction", "c", "shortest", "Direction for color hue interpolation (shortest, clockwise, counter-clockwise or sh, cw, ccw)")
     rootCmd.Flags().IntVarP(&steps, "steps", "t", 0, "Number of discrete color steps (0 for smooth gradient)")
     rootCmd.Flags().BoolVarP(&invert, "invert", "i", false, "Invert the gradient direction")
     rootCmd.Flags().BoolP("help", "h", false, "Show help message")
@@ -227,7 +227,7 @@ func init() {
         fmt.Fprintln(os.Stderr, "  echo \"Stepped!\" | colorblend --steps 5 --start-color #FF0000 --end-color #0000FF")
         fmt.Fprintln(os.Stderr, "  echo \"Vertical!\" | colorblend --gradient-direction vertical --start-color #FF0000 --end-color #0000FF")
         fmt.Fprintln(os.Stderr, "  echo \"Inverted!\" | colorblend --invert")
-        fmt.Fprintln(os.Stderr, "  echo \"Hue Direction\" | colorblend --hue-direction clockwise")
+        fmt.Fprintln(os.Stderr, "  echo \"Color Direction\" | colorblend --color-direction # (default is ccw)")
     })
 
     rootCmd.SetVersionTemplate("colorblend v1.0.0\n")

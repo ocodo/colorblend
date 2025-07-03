@@ -3,9 +3,9 @@ Usage:
   colorblend [flags]
 
 Flags:
-  -c, --color-direction string      Direction for color hue interpolation (shortest, clockwise, counter-clockwise) (default "shortest")
+  -c, --color-direction string      Direction for color hue interpolation (shortest, clockwise, counter-clockwise or sh, cw, ccw) (default "shortest")
   -e, --end-color string            Ending HEX color (e.g., #00FFFF for cyan) (default "#00FFFF")
-  -g, --gradient-direction string   Direction of the gradient (horizontal, vertical) (default "horizontal")
+  -g, --gradient-direction string   Direction of the gradient (horizontal, vertical or h, v) (default "horizontal")
   -h, --help                        Show help message
   -i, --invert                      Invert the gradient direction
   -s, --start-color string          Starting HEX color (e.g., #FF00FF for magenta) (default "#FF00FF")
@@ -19,5 +19,5 @@ Examples:
   echo "Stepped!" | colorblend --steps 5 --start-color #FF0000 --end-color #0000FF
   echo "Vertical!" | colorblend --gradient-direction vertical --start-color #FF0000 --end-color #0000FF
   echo "Inverted!" | colorblend --invert
-  echo "Hue Direction" | colorblend --hue-direction clockwise
+  echo "Color Direction" | colorblend --color-direction # (default is ccw)
 ```
